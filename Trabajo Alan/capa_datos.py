@@ -99,7 +99,7 @@ class RepositorioEventos:
         return [Evento(*fila) for fila in filas]
 
     def obtener_evento_por_id(self, evento_id: int) -> Evento | None:
-        """Obtiene un evento específico por su ID"""
+        #Obtiene un evento específico por su ID
         with sqlite3.connect(self.DB) as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -111,7 +111,7 @@ class RepositorioEventos:
         return Evento(*fila) if fila else None
 
     def actualizar_boletos_vendidos(self, evento_id: int, cantidad: int) -> None:
-        """Actualiza el contador de boletos vendidos de un evento"""
+        #Actualiza el contador de boletos vendidos de un evento
         with sqlite3.connect(self.DB) as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -122,7 +122,7 @@ class RepositorioEventos:
             conn.commit()
 
     def establecer_boletos_vendidos(self, evento_id: int, cantidad: int) -> None:
-        """Establece directamente el contador de boletos vendidos de un evento"""
+        #Establece directamente el contador de boletos vendidos de un evento
         with sqlite3.connect(self.DB) as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -202,6 +202,54 @@ class RepositorioVentas:
 
 
 # 5 Hilos
+class HiloSimuladorComprasConcurrentes(threading.Thread):
+    # Simula varias personas comprando boletos al mismo tiempo.
+    def __init__(self, gestor_ventas, intervalo_min=30, intervalo_max=45):
+        super().__init__()
+        self.daemon = True
+        self.activo = True
+        self.gestor_ventas = gestor_ventas
+        self.intervalo_min = intervalo_min
+        self.intervalo_max = intervalo_max
+
+    def run(self):
+        import random
+        nombres = ["Ana", "Luis", "Pedro", "Sofía", "Juan", "Lucía", "Carlos", "María"]
+        gmails = ["ana@gmail.com", "luis@gmail.com", "pedro@gmail.com", "sofia@gmail.com", "juan@gmail.com", "lucia@gmail.com", "carlos@gmail.com", "maria@gmail.com"]
+        while self.activo:
+            try:
+                # Espera aleatoria entre intentos de compra
+                time.sleep(random.randint(self.intervalo_min, self.intervalo_max))
+                eventos = self.gestor_ventas.repositorio_eventos.listar_eventos()
+                if not eventos:
+                    continue
+                evento = random.choice(eventos)
+                disponibles = evento.boletos_disponibles - evento.boletos_vendidos
+                if disponibles <= 0:
+                    continue
+                cantidad = random.randint(1, min(3, disponibles))
+                nombre = random.choice(nombres)
+                gmail = random.choice(gmails)
+                # Intenta comprar usando el lock global
+                if compra_lock.acquire(blocking=False):
+                    try:
+                        exito, mensaje = self.gestor_ventas.vender_boletos(evento.id, nombre, gmail, cantidad)
+                        if exito:
+                            print(f"[Simulación] {mensaje}")
+                        else:
+                            print(f"[Simulación] Falló compra: {mensaje}")
+                        # Simula el tiempo de procesamiento de la compra (lock ocupado)
+                        tiempo_procesando = random.randint(60, 120)
+                        print(f"[Simulación] Procesando compra durante {tiempo_procesando} segundos...")
+                        time.sleep(tiempo_procesando)
+                    finally:
+                        compra_lock.release()
+                else:
+                    # Otra compra está en curso
+                    pass
+            except Exception as e:
+                print(f"Error en simulador de compras: {e}")
+                pass
 
 class HiloProcesadorVentas(threading.Thread):
     #Hilo para procesar ventas pendientes en segundo plano
@@ -326,7 +374,6 @@ class HiloSincronizadorDatos(threading.Thread):
                 print(f"Error en sincronización: {e}")
                 pass
 
-
 #3 Procesos 
 
 class ProcesoCalculoEstadisticas(multiprocessing.Process):
@@ -385,3 +432,10 @@ class ProcesoMantenimientoBaseDatos(multiprocessing.Process):
         except Exception as e:
             print(f"Error en mantenimiento de BD: {e}")
             pass
+
+# Lock global para simular acceso concurrente a la compra de boletos
+compra_lock = threading.Lock()
+
+
+
+

@@ -1,6 +1,6 @@
 # Capa de presentación e interfaz de usuario del sistema de venta de boletos
 
-from capa_logica import GestorEventos, GestorVentas, GestorConcurrencia
+from capa_logica import GestorEventos, GestorVentas, GestorConcurrencia, compra_lock
 
 
 class InterfazUsuario:
@@ -11,8 +11,8 @@ class InterfazUsuario:
         self.gestor_ventas = GestorVentas()
         self.gestor_concurrencia = GestorConcurrencia()
         
-        # Inicia la concurrencia automáticamente al crear la interfaz
-        self.gestor_concurrencia.iniciar_concurrencia()
+        # Inicia la concurrencia y el simulador de compras
+        self.gestor_concurrencia.iniciar_concurrencia(self.gestor_ventas)
 
     def mostrar_menu_principal(self) -> None:
         print("\n--- MENÚ SISTEMA DE VENTA DE BOLETOS ---")
@@ -73,9 +73,19 @@ class InterfazUsuario:
             cliente = input("Nombre del cliente: ").strip()
             gmail = input("Correo electrónico del cliente: ").strip()
             cantidad = int(input("Cantidad de boletos a comprar: "))
-            
-            exito, mensaje = self.gestor_ventas.vender_boletos(evento_id, cliente, gmail, cantidad)
-            print(mensaje)
+            print("Intentando comprar boletos...")
+            # Intentar adquirir el lock (espera si está ocupado)
+            if not compra_lock.acquire(blocking=False):
+                print("Hay otras personas comprando en este momento. Por favor espere...")
+                compra_lock.acquire()
+            try:
+                exito, mensaje = self.gestor_ventas.vender_boletos(evento_id, cliente, gmail, cantidad)
+                if exito:
+                    print(mensaje)
+                else:
+                    print(f"\n✗ ADVERTENCIA: {mensaje}\n")
+            finally:
+                compra_lock.release()
                 
         except ValueError:
             print("\n✗ Error: Ingresa valores numéricos válidos.")

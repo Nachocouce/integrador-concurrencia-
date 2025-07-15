@@ -2,7 +2,7 @@
 
 import datetime
 import sqlite3
-from capa_datos import RepositorioEventos, RepositorioVentas, Evento
+from capa_datos import RepositorioEventos, RepositorioVentas, Evento, compra_lock, HiloSimuladorComprasConcurrentes
 
 
 class GestorEventos:
@@ -91,7 +91,7 @@ class GestorConcurrencia:
             ProcesoRespaldoCompleto, 
             ProcesoMantenimientoBaseDatos
         )
-        
+
         # Inicializar 5 hilos concurrentes
         self.hilos = [
             HiloProcesadorVentas(),
@@ -100,36 +100,35 @@ class GestorConcurrencia:
             HiloRespaldoAutomatico(),
             HiloSincronizadorDatos()
         ]
-        
         # Inicializar 3 procesos concurrentes
         self.procesos = [
             ProcesoCalculoEstadisticas(),
             ProcesoRespaldoCompleto(),
             ProcesoMantenimientoBaseDatos()
         ]
+        self.simulador = None
     
-    def iniciar_concurrencia(self):
+    def iniciar_concurrencia(self, gestor_ventas=None):
         #Inicia todos los hilos y procesos concurrentes
-        
-        # Iniciar los 5 hilos
         for hilo in self.hilos:
             hilo.start()
-        
-        # Iniciar los 3 procesos
         for proceso in self.procesos:
             proceso.start()
+        # Iniciar simulador si se pasa gestor_ventas
+        if gestor_ventas is not None:
+            self.simulador = HiloSimuladorComprasConcurrentes(gestor_ventas, intervalo_min=30, intervalo_max=45)
+            self.simulador.start()
     
     def detener_concurrencia(self):
         #Detiene todos los hilos y procesos concurrentes
-        
-        # Detener hilos
         for hilo in self.hilos:
             hilo.activo = False
             hilo.join()
-        
-        # Terminar procesos
         for proceso in self.procesos:
             proceso.terminate()
             proceso.join()
+        if self.simulador:
+            self.simulador.activo = False
+            self.simulador.join()
         
 
